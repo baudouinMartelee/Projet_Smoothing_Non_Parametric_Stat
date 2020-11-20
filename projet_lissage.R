@@ -24,30 +24,23 @@ lines(X, m(X), col=3)
 legend("top", legend = "m(x)", col = "green",lty=c(1,1),cex=1)
 
 # Plot the true  variance theta^2
-plot(X, sigma_squared(X), type = "l", ylab = "Variance")
+plot(X, sigma_squared(X), type = "l", ylab = "Variance sigma2")
 
 
 ################################################
 #   CHOOSING A GOOD BANDWITH
 ################################################
 
+#global bandwith
+h_gl <- glkerns(X, Y, hetero = TRUE, sig = sigma_squared(X))
+h_gl$bandwidth
+#Local bandwith
+h_lo <- lokerns(X, Y, hetero = TRUE, sig = sigma_squared(X))
+h_lo$bandwidth
+
 #Rule of Thumb estimator
 h2 <- bw.nrd(X)
 
-#cross validation estimator
-h3 <- bw.ucv(X)
-
-# SHeater & Jones bandwith selector 
-h_dpi <- bw.SJ(X,method = "dpi")
-h_ste <- bw.SJ(X)
-
-plot(range(X), c(0,1), type="n")
-lines(density(X),col = 1)
-lines(density(X, n=100, from=min(X), to=max(X), bw="nrd", kernel = "gaussian"), col=2)
-lines(density(X, n=100, from=min(X), to=max(X), bw="ucv", kernel = "gaussian"), col=4)
-lines(density(X, n=100, from=min(X), to=max(X), bw="SJ", kernel = "gaussian"), col=5)
-legend("center", legend=c("default", "nrd", "ucv", "SJ"),col = c(1,2, 4, 5), lty=c(1,1,1), rug(X),cex = 0.5)
-rug(X)
 ################################################
 #   COMPARAISON OF DIFFERENT ESTIMATORS FOR FUNCTION M(X)
 ################################################
@@ -61,9 +54,6 @@ nwRegEstim <- function(x, X, Y, h, K) sum(Y * K((x - X)/h))/sum(K((x - X)/h))
 
 # Kernels CDF
 Knorm <- function(u) dnorm(u) #Gaussian kernel
-Kunif <- function(u) (abs(u) <= 1) * 0.5 #Uniform kernel
-Kepan <- function(u) 0.75 * (1 - u^2) * (abs(u) <= 1) #Epanechnikov kernel
-Ktria <- function(u) (1 - abs(u)) * (abs(u) <= 1) #Triangle kernel
 
 
 NWnormEst <- sapply(x, function(x) nwRegEstim(x, X, Y, h, Knorm))
