@@ -1,19 +1,25 @@
 # PROJET SMOOTHING TECHNIQUE
 
 
-install.packages("lokern")
+#install.packages("lokern")
 library("lokern")
 rm(list = ls())
 
 
 # We create our data
-set.seed(22.1)
+set.seed(22.01)
 n <- 100
+
 X <- seq(from = 1/n, to = 1, by = 1/n)
 m <- function(x) 3 * (x)^(1/4) * cos(1.2/(x + 0.05))
-sigma_squared <- function(x) 2 + sin(2* pi *x)
+variance <- function(X) { 
+  var <- 2 + sin(2*pi*X) 
+  return(var)
+}
+variance
+sigma_squared <- function(x) 2 + sin(2*pi*x)
 epsilon <- rnorm(n, mean = 0, sd = 1)
-set.seed(22.2)
+set.seed(22.02)
 Y <- m(X) + 0.5 * sqrt(sigma_squared(X)) * epsilon
 Y
 # Plot of observations and m(x) function.
@@ -31,15 +37,16 @@ plot(X, sigma_squared(X), type = "l", ylab = "Variance sigma2")
 #   CHOOSING A GOOD BANDWITH
 ################################################
 
+# In the course, we have seen that global and local bandwith + rule of thumb are good fits
+
 #global bandwith
-h_gl <- glkerns(X, Y, hetero = TRUE, sig = sigma_squared(X))
+h_gl <- glkerns(X, Y, hetero = TRUE, sig = sigma_squared(X), is.rand = F)
 h_gl$bandwidth
 #Local bandwith
-h_lo <- lokerns(X, Y, hetero = TRUE, sig = sigma_squared(X))
+h_lo <- lokerns(X, Y, hetero = TRUE, sig = sigma_squared(X), n.out = 100)
 h_lo$bandwidth
-
 #Rule of Thumb estimator
-h2 <- bw.nrd(X)
+h_RT <- bw.nrd(X)
 
 ################################################
 #   COMPARAISON OF DIFFERENT ESTIMATORS FOR FUNCTION M(X)
@@ -48,7 +55,6 @@ h2 <- bw.nrd(X)
 # A KERNEL ESTIMATOR
 ############################
 
-h = h_ste
 # Nadaraya-Watson  estimator
 nwRegEstim <- function(x, X, Y, h, K) sum(Y * K((x - X)/h))/sum(K((x - X)/h))
 
@@ -56,63 +62,137 @@ nwRegEstim <- function(x, X, Y, h, K) sum(Y * K((x - X)/h))/sum(K((x - X)/h))
 Knorm <- function(u) dnorm(u) #Gaussian kernel
 
 
-NWnormEst <- sapply(x, function(x) nwRegEstim(x, X, Y, h, Knorm))
+NWnormEst_h_gl <- sapply(x, function(x) nwRegEstim(x, X, Y, h_gl$bandwidth, Knorm))
+NWnormEst_h_lo <- sapply(x, function(x) nwRegEstim(x, X, Y, h_lo$bandwidth, Knorm))
+NWnormEst_h_RT <- sapply(x, function(x) nwRegEstim(x, X, Y, h_RT, Knorm))
 
-plot(X, Y, pch="+", col = "black")
-lines(X, NWnormEst, type = "l", col = 4)
+plot(X, Y, pch=20, col = "black", main = "Comparaison m(x) avec différents bandwidths pour Nadarya-Watson")
 lines(x, m(x), type = "l", col = 3)
-legend("topright", legend = c("NW", "True"),
-       col = c( 4, 3),
-       lty = c( 1, 1), cex = 0.5)
+lines(X, NWnormEst_h_gl, type = "l", col = 4)
+lines(X, NWnormEst_h_lo, type = "l", col = 2)
+lines(X, NWnormEst_h_RT, type = "l", col = 5)
+legend("topright", legend = c("True m(x)", "NW, h global = 0.05","NW, h local","NW, h Thumb of rule = 0.12"),
+       col = c( 3, 4, 2, 5),
+       lty = c( 1, 1), cex = 0.8)
 
+#Gass and Muller estimator
+cdfKnorm <- function(u) pnorm(u) #Gaussian kernel cdf
+
+
+gmRegEstim <- function(x, X, Y, h, cdfK) { 
+  IntK <- NULL
+  n <- length(X)
+  S <- -Inf
+  for (i in 1:(n - 1)) {
+    S <- rbind(S, 0.5 * (X[i] + X[i + 1])) 
+    }
+    S <- rbind(S, Inf)
+    l <- (x - S)/h 
+    for (i in 1:n) {
+      IntK[i] <- cdfK(l[i]) - cdfK(l[i + 1]) 
+      }
+      sum(IntK * Y) 
+}
+
+GMnormEst_h_gl <- sapply(x, function(x) gmRegEstim(x, X, Y, h_gl$bandwidth, cdfKnorm ))
+GMnormEst_h_lo <- sapply(x, function(x) gmRegEstim(x, X, Y, h_lo$bandwidth, cdfKnorm ))
+GMnormEst_h_RT <- sapply(x, function(x) gmRegEstim(x, X, Y, h_RT, cdfKnorm ))
+
+
+plot(X, Y, pch=20, col = "black", main = "Comparaison m(x) avec différents bandwidths pour Gasser & Muller")
+lines(x, m(x), type = "l", col = 3)
+lines(X, GMnormEst_h_gl, type = "l", lty=2, lwd= 1.5, col = 4)
+lines(X, GMnormEst_h_lo, type = "l", lty=2, lwd= 1.5, col = 2)
+lines(X, GMnormEst_h_RT, type = "l", lty=2, lwd= 1.5, col = 5)
+legend("topright", legend = c("True m(x)", "GM, h global = 0.05","GM, h local","GM, h Thumb of rule = 0.12"),
+       col = c( 3, 4, 2),
+       lty = c( 1, 1), cex = 0.8)
 
 # A NON-KERNEL ESTIMATOR (SPLINE SMOOTHING)
 #####################################
+
+
 spl0 <- smooth.spline(X, Y) # default (Cross-Validation)
-spl1 <- smooth.spline(X, Y, spar=0) # smoothing parameter = 0 (equi. lambda = 0) (interp
-# lambda = r * 256^(3*spar - 1)
-# r = tr(X' W X) / tr(Sigma)
-spl2 <- smooth.spline(X, Y, spar=0.5)# smoothing parameter = 0.5
-spl3 <- smooth.spline(X, Y, spar=2) # smoothing parameter = 2 (linear function) #(equi. lambda = \infty)
-spl4 <- smooth.spline(X, Y, spar=0.32)
+spl1 <- smooth.spline(X, Y,lambda=0)
+spl2 <- smooth.spline(X, Y, spar=h_gl$bandwidth)
+spl3 <- smooth.spline(X, Y, spar=h_RT)# smoothing parameter = h_RT
 
 ## Visualization
-plot(X, Y, main="Spline Smoothing")
+plot(X, Y, pch=20, col = "black", main="Spline Smoothing")
 lines(x, m(x), col=1, lty=2)
 lines(predict(spl0,x), col=2)
 lines(predict(spl1,x), col=3)
 lines(predict(spl2,x), col=4)
 lines(predict(spl3,x), col=5)
-lines(predict(spl4,x), col=6)
-legend("topleft", legend=c("True","spline default (Cross-Validation)", "spline(spar=0)","spline(spar=0.5)","spline(spar=2)","spline(spar=1)"),
-       col = c(1,2,3,4,5,6),lty=c(2,1,1,1,1,1), cex=0.5)
+legend("bottomright", legend=c("True m(x)","spline default (Cross-Validation)","spline(spar=0)" ,"spline(spar=h_gl)","spline(spar=h_RT)"),
+       col = c(1,2,3,4,5),lty=c(2,1,1,1,1,1), cex=0.8)
 
 ################################################
 #  ESTIMATORS FOR VARIANCE FUNCTION
 ################################################
 
-# FAN et YAO
-epsilonEstim = Y - NWnormEst
+# FAN YAO  use 2 differents smoothing parameters
+# 1for estimate m(x) and 1 for estimate sigma2.
 
-varRegEstim <- function(x, X, Y, h, K) sum(epsilonEstim^2 * K((x - X)/h))/sum(K((x - X)/h))
+estimateVariance <- function(methodUsed, method_normEstim_h_gl, meth_norm_estim_h_lo, meth_norm_estim_h_RT, h_gl, h_lo, h_RT){
+  
+    # FAN et YAO en utilisant NW pour m(x)
+    epsilonEstim_h_gl = Y - method_normEstim_h_gl
+    epsilonEstim_h_lo = Y - meth_norm_estim_h_lo
+    epsilonEstim_h_RT = Y - meth_norm_estim_h_RT
+    
+    varRegEstim <- function(x, X, Y, h, K, epsilonEstim) sum(epsilonEstim^2 * K((x - X)/h))/sum(K((x - X)/h))
+    
+    # in this notation the first h is for estimate m(x) and the second sigma2
+    # for example varNormRegEstim_h_gl_h_lo  we use h_gl for estimate m(x) and h_lo to estimate h_lo
+    varNormRegEstim_h_gl_h_lo <- sapply(x,function(x)  varRegEstim(x, X, Y, h_lo$bandwidth, Knorm, epsilonEstim_h_gl))
+    varNormRegEstim_h_gl_h_RT <- sapply(x,function(x)  varRegEstim(x, X, Y, h_RT, Knorm, epsilonEstim_h_gl))
+    varNormRegEstim_h_lo_h_gl <- sapply(x,function(x)  varRegEstim(x, X, Y, h_gl$bandwidth, Knorm, epsilonEstim_h_lo))
+    varNormRegEstim_h_lo_h_RT <- sapply(x,function(x)  varRegEstim(x, X, Y, h_RT, Knorm, epsilonEstim_h_lo))
+    varNormRegEstim_h_RT_h_gl <- sapply(x,function(x)  varRegEstim(x, X, Y, h_gl$bandwidth, Knorm, epsilonEstim_h_RT))
+    varNormRegEstim_h_RT_h_lo <- sapply(x,function(x)  varRegEstim(x, X, Y, h_lo$bandwidth, Knorm, epsilonEstim_h_RT))
+    
+    
+    VarianceX <- sigma_squared(X)
+    
+    plot(X, VarianceX, type = "l", col = "black", main= paste("Comparaison de Variance en utilisant la méthode ",methodUsed))
+    lines(X, varNormRegEstim_h_gl_h_lo, type = "l", col = 2)
+    lines(X, varNormRegEstim_h_gl_h_RT, type = "l", col = 3)
+    lines(x, varNormRegEstim_h_lo_h_gl, type = "l", col = 4)
+    lines(x, varNormRegEstim_h_lo_h_RT, type = "l", col = 5)
+    lines(x, varNormRegEstim_h_RT_h_gl, type = "l", col = 6)
+    lines(x, varNormRegEstim_h_RT_h_lo, type = "l", col = 7)
+    
+    legend("topright", legend = c("True Variance", "variance NW, h1 = gl,h2 = lo","variance NW, h1 = gl,h2 = RT","variance NW, h1 = lo,h2 = gl","variance NW, h1 = lo,h2 = RT","variance NW, h1 = RT,h2 = gl","variance NW, h1 = RT,h2 = lo"),
+           col = c( 1,2,3,4,5,6,7),
+           lty = c( 1, 1), cex = 0.8)
+}
 
-varNormRegEstim <- sapply(x,function(x)  varRegEstim(x, X, Y, h, Knorm))
+# compare variance using differents method like Nadaraya-Watson  , Gasser-Muller, Spline smoothing
 
-VarianceX <- theta_squared(X)
+estimateVariance("Nadarya-Watson", NWnormEst_h_gl, NWnormEst_h_lo, NWnormEst_h_RT, h_gl, h_lo, h_RT)
+estimateVariance("Gasser-Muller", GMnormEst_h_gl, GMnormEst_h_lo, GMnormEst_h_RT, h_gl, h_lo, h_RT)
 
-plot(X, VarianceX, type = "l", col = "black")
-plot(X, varNormRegEstim, type = "l", col = "black")
-lines(X, varNormRegEstim , type = "l", col = 4)
-lines(x, varNormRegEstim, type = "l", col = 3)
-legend("topright", legend = c("TRUE VARIANCE", "VARIANCE ESTIMATOR"),
-       col = c( 4, 3),
-       lty = c( 1, 1), cex = 0.5)
+# variance for spline smoothing
 
-################################################
-# plot the estimate function
-################################################
+epsilonEstim_h_gl_SM = Y - spl1$y
+epsilonEstim_h_RT_SM = Y - spl3$y
 
+varRegEstim <- function(x, X, Y, h, K, epsilonEstim) sum(epsilonEstim^2 * K((x - X)/h))/sum(K((x - X)/h))
 
+VarianceX <- sigma_squared(X)
+
+plot(X, VarianceX, type = "l", col = "black", main="Variance using Spline Smoothing")
+lines(predict(spl1,x), col=3)
+lines(predict(spl3,x), col=5)
+legend("topright", legend=c("spline(spar=h_gl)","spline(spar=h_RT)"),
+       col = c(3,5),lty=c(1,1), cex=0.8)
+
+# in this notation the first h is for estimate m(x) and the second sigma2
+# for example varNormRegEstim_h_gl_h_lo  we use h_gl for estimate m(x) and h_lo to estimate h_lo
+varNormRegEstim_h_gl_h_RT <- sapply(x,function(x)  varRegEstim(x, X, Y, h_RT, Knorm, epsilonEstim_h_gl))
+varNormRegEstim_h_RT_h_gl <- sapply(x,function(x)  varRegEstim(x, X, Y, h_gl$bandwidth, Knorm, epsilonEstim_h_RT))
+VarianceX <- sigma_squared(X)
 
 
 ################################################
