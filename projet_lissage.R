@@ -184,7 +184,6 @@ legend("topright", legend = c("True Variance", "variance NW, h1 = gl,h2 = lo","v
 
 estimateVarianceSMCV <- function(x, X, Y,h2, K){
   epsilonEstim = 2*(Y - smooth.spline(X, Y)$y)
-  cat("epsilon = ",epsilonEstim)
   fanAndYaoEstim <- sum(epsilonEstim^2 * K((x - X)/h2))/sum(K((x - X)/h2))
   return(fanAndYaoEstim)
 }
@@ -192,7 +191,6 @@ estimateVarianceSMCV <- function(x, X, Y,h2, K){
 estimateVarianceSM <- function(x, X, Y, h1, h2, K){
   
   epsilonEstim = 2*(Y - smooth.spline(X, Y, spar = h1)$y)
-  cat("epsilon = ",epsilonEstim)
   fanAndYaoEstim <- sum(epsilonEstim^2 * K((x - X)/h2))/sum(K((x - X)/h2))
   return(fanAndYaoEstim)
 }
@@ -200,77 +198,89 @@ estimateVarianceSM <- function(x, X, Y, h1, h2, K){
 varianceSM_CV_h_gl <-sapply(x, function(x) estimateVarianceSMCV(x, X, Y, h_gl$bandwidth, Knorm))
 varianceSM_CV_h_lo <-sapply(x, function(x) estimateVarianceSMCV(x, X, Y, h_lo$bandwidth, Knorm))
 varianceSM_CV_h_RT <-sapply(x, function(x) estimateVarianceSMCV(x, X, Y, h_RT, Knorm))
-
 varianceSM_hgl_hgl <-sapply(x, function(x) estimateVarianceSM(x, X, Y, h_gl$bandwidth, h_gl$bandwidth, Knorm))
-
 varianceSM_hgl_hlo <-sapply(x, function(x) estimateVarianceSM(x, X, Y, h_gl$bandwidth, h_lo$bandwidth, Knorm))
 varianceSM_hgl_hrt <-sapply(x, function(x) estimateVarianceSM(x, X, Y, h_gl$bandwidth, h_RT, Knorm))
-varianceSM_hgl_hgl <-sapply(x, function(x) estimateVarianceSM(x, X, Y, h_gl$bandwidth, h_gl$bandwidth, Knorm))
-varianceSM_hgl_hgl <-sapply(x, function(x) estimateVarianceSM(x, X, Y, h_gl$bandwidth, h_gl$bandwidth, Knorm))
-varianceSM_hgl_hgl <-sapply(x, function(x) estimateVarianceSM(x, X, Y, h_gl$bandwidth, h_gl$bandwidth, Knorm))
-
-epsilonEstim = 2*(Y -  sapply(x, function(x) smooth.spline(X, Y))$y)
-varianceSM1 <- sum((epsilonEstim^2) * spl0 )/sum(spl0)
+varianceSM_hRT_hRT <-sapply(x, function(x) estimateVarianceSM(x, X, Y, h_RT, h_RT, Knorm))
+varianceSM_hRT_hgl <-sapply(x, function(x) estimateVarianceSM(x, X, Y, h_RT, h_gl$bandwidth, Knorm))
+varianceSM_hRT_hlo <-sapply(x, function(x) estimateVarianceSM(x, X, Y, h_RT, h_lo$bandwidth, Knorm))
 
 VarianceX <- sigma_squared(X)
 
-plot(X, VarianceX, type = "l",ylim = c(-5,20), col = "black", main="Variance using Spline Smoothing")
+plot(X, VarianceX, type = "l",ylim = c(0,5), col = "black", main="Variance using Spline Smoothing")
 lines(x, varianceSM_CV_h_gl, col=2)
 lines(x, varianceSM_CV_h_lo, col=3)
 lines(x, varianceSM_CV_h_RT, col=4)
-legend("topright", legend=c("spline(spar=h_gl)","spline(spar=h_RT)"),
+lines(x, varianceSM_hgl_hgl, col=5)
+lines(x, varianceSM_hgl_hlo, col=6)
+lines(x, varianceSM_hgl_hrt, col=7)
+lines(x, varianceSM_hRT_hRT, col=8)
+lines(x, varianceSM_hRT_hgl, col=9)
+lines(x, varianceSM_hRT_hlo, col=10)
+
+legend("topright", legend=c("spline(Cross Validation, h_gl)","spline(Cross Validation, h_lo)","spline(Cross Validation, h_RT)"),
        col = c(3,5),lty=c(1,1), cex=0.8)
-
-# in this notation the first h is for estimate m(x) and the second sigma2
-# for example varNormRegEstim_h_gl_h_lo  we use h_gl for estimate m(x) and h_lo to estimate h_lo
-varNormRegEstim_h_gl_h_RT <- sapply(x,function(x)  varRegEstim(x, X, Y, h_RT, Knorm, epsilonEstim_h_gl))
-varNormRegEstim_h_RT_h_gl <- sapply(x,function(x)  varRegEstim(x, X, Y, h_gl$bandwidth, Knorm, epsilonEstim_h_RT))
-VarianceX <- sigma_squared(X)
-
 
 ################################################
 #   MONTE CARLO SIMULATION 
 ################################################
-
-#Here I consider a fixed n
-#and I compute MSE for a sequence of points x's
-Knorm <- function(u) dnorm(u) #Gaussian kernel
-## NW regression estimator
-nwRegEst <- function(x, X, Y, h, K) sum(Y * K((x - X)/h))/sum(K((x - X)/h))
+# we have to do the simulation for k = 25,50,100,500,1000
 # monte carlo estimation
-K <- 1000# number of replications
+# number of replications
+
 n <- 100 # number of observations
-h= h_ste
-x <- seq(from = 0, to = 1, length = 300) #a sequence of points
+x <- seq(from = 0, to = 1, length = 100) #a sequence of points
 m <- function(x) 3 * (x)^(1/4) * cos(1.2/(x + 0.05)) #true regression model
-theta_squared <- function(x) 2 + sin(2* pi *x) # true Variance
 epsilon <- rnorm(n, mean = 0, sd = 1)
 
-NWnormEst <- matrix(NA, nrow = K, ncol = length(x))
-
-for (k in 1:K) {
-  set.seed(k)
-  X <- seq(from = 1/n, to = 1, by = 1/n)
-  set.seed(k + 1)
-  Y <- m(X) + 0.5 * sqrt(theta_squared(X)) * epsilon
-  NWnormEst[k,] <- sapply(x, function(x) nwRegEst(x, X, Y, h, Knorm))
+GM_simulation <- function(x, sigma_squared, m, K, iter, h1, h2, regEstim){
+  
+  GMvarianceEstim <- matrix(NA, nrow = iter, ncol = length(x))
+  GMvariance <- matrix(NA, nrow = iter, ncol = length(x))
+  for (k in 1:iter) {
+    set.seed(k)
+    epsilon <- rnorm(n, mean = 0, sd = 1)
+    set.seed(k+1)
+    Y <- m(X) + 0.5 * sqrt(sigma_squared(X)) * epsilon
+    for (i in 1:length(x)) {
+      GMvarianceEstim[k,i] <- estimateVariance (x[i], X, Y, h1, h2, regEstim, K)
+      GMvariance[k,i] <- sigma_squared(x[i])
+    }
+    
+    SE = matrix(NA, nrow = iter, ncol = length(x))
+    for (i in 1:length(x)) {
+      SE[k,i] = (GMvarianceEstim[k,i]-GMvariance[k,i])^2
+    }  
+  }
+  
+ 
+  
+  meanGMvarianceEstim <- colMeans(GMvarianceEstim)
+  meanGMvariance <- colMeans(GMvariance)
+  #cat(class(meanGMvarianceEstim))
+  print.table(meanGMvarianceEstim)
+  print.table(meanGMvariance)
+  biais = meanGMvarianceEstim - meanGMvariance
+  cat(biais)
+  #variance1<-colMeans((NWnormEst-NW)^2)
+  #plot(x,variance1 ,ylab="Variance",type="l",col="#C72C48")
+  MSE = colMeans(SE)
+  MSSE = mean(MSE) # MSSE as an estimation of MISE in simulation
+  
+  
+  #plot(x, biais, type="l", col = 2)
+  #abline(h=0)
+  my_list <- list("biais" = biais,"MSE" =  MSE,"variance" = variance)
+  return(my_list)
 }
-NW<- colMeans(NWnormEst)
-bias = NW - m(x)
-SE = matrix(NA, nrow = K, ncol = length(x))
-for (i in 1:length(x)) {
-  SE[,i] = (NWnormEst[,i]-m(x[i]))^2
-}
 
-variance1<-colMeans((NWnormEst-NW)^2)
-plot(x,variance1 ,ylab="Variance",type="l",col="#C72C48")
+library(gsubfn)
+GMresult <- GM_simulation(x, sigma_squared, m, cdfKnorm, 25, h_gl$bandwidth, h_gl$bandwidth, gmRegEstim)
+GMresult$biais
 
-MSE = colMeans(SE)
-MSSE = mean(MSE) # MSSE as an estimation of MISE in simulation
+MSE <- GM_simulation(x, sigma_squared, m, cdfKnorm, 25, h_gl$bandwidth, h_gl$bandwidth, gmRegEstim)[[2]]
 
-
-plot(x, bias, type="l", col = 2)
-abline(h=0)
+variance <- GM_simulation(x, sigma_squared, m, cdfKnorm, 25, h_gl$bandwidth, h_gl$bandwidth, gmRegEstim)[[3]]
 
 
 
